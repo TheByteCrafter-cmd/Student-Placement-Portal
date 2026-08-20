@@ -32,22 +32,37 @@ F:\Student Placement Portal\
 
 ## ⚙️ How to Run Locally
 
-### 1. Backend Server Setup
+### 1. Manual PostgreSQL Database Setup (Dependency)
+PostgreSQL is configured as the core database engine. If PostgreSQL is not yet running on your local machine:
+1. Install PostgreSQL Server (version 14+) or start the local service on default port `5432`.
+2. Create local database: `placement_portal`.
+3. Configure credentials in your root `.env` file (copied from `.env.example`):
+   ```env
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/placement_portal
+   POSTGRES_HOST=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=postgres
+   POSTGRES_DB=placement_portal
+   ```
+*(Note: If PostgreSQL is offline/unreachable during local development, the backend automatically detects it, logs a warning, and returns a graceful `degraded` health status via `/api/health` without crashing.)*
+
+### 2. Backend Server Setup
 ```bash
 cd backend
 npm install
 npm run dev
 ```
-The backend API server will start at `http://localhost:5000`.
+The backend API server starts at `http://localhost:5000`.
 - Health Check Endpoint: `http://localhost:5000/api/health`
 
-### 2. Frontend Client Setup
+### 3. Frontend Client Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-The frontend SPA will start at `http://localhost:5173`.
+The frontend SPA starts at `http://localhost:5173`.
 
 ---
 
