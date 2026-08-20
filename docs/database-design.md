@@ -1,41 +1,7 @@
 # Database Design & Relational Schema Specification
 
 ## Overview
-The Student Placement Portal relies on a structured relational database model (PostgreSQL recommended). The schema enforces data integrity, role-based segregation, auditability, efficient job deduplication, and fast query execution for student search and administrative moderation.
-
----
-
-## Entity Relationship Overview
-
-```
-   ┌─────────────┐       1:1       ┌─────────────┐
-   │    users    │ ─────────────── │  students   │
-   └─────────────┘                 └─────────────┘
-          │                               │ 1:N
-          │ 1:1                           ▼
-          │                        ┌─────────────┐
-          │                        │   resumes   │
-          ▼                        └─────────────┘
-   ┌─────────────┐                        │ 1:N
-   │   admins    │                        ▼
-   └─────────────┘                 ┌─────────────┐
-          │                        │ applications│
-          │ 1:N (Verifies)         └─────────────┘
-          ▼                               │
-   ┌─────────────┐                        │ N:1
-   │    jobs     │ ◄──────────────────────┘
-   └─────────────┘
-          ▲
-          │ N:1
-   ┌─────────────┐       1:N       ┌──────────────────┐
-   │ job_sources │ ─────────────── │ job_source_runs  │
-   └─────────────┘                 └──────────────────┘
-          │ 1:N
-          ▼
-   ┌─────────────────┐
-   │ job_duplicates  │
-   └─────────────────┘
-```
+The Student Placement Portal relies on a structured relational database model (PostgreSQL recommended). The schema enforces data integrity, role-based segregation, auditability, efficient job deduplication, fast query execution for student search, and self-recorded external application tracking.
 
 ---
 
@@ -51,7 +17,6 @@ The Student Placement Portal relies on a structured relational database model (P
 | `password_hash` | VARCHAR(255) | NOT NULL | Argon2 / bcrypt hashed password |
 | `role` | VARCHAR(20) | NOT NULL, CHECK (`role IN ('STUDENT', 'ADMIN')`) | User system role |
 | `is_active` | BOOLEAN | NOT NULL, DEFAULT `true` | Account status flag |
-| `email_verified` | BOOLEAN | NOT NULL, DEFAULT `false` | Email verification state |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Record creation timestamp |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Record update timestamp |
 
@@ -95,7 +60,7 @@ The Student Placement Portal relies on a structured relational database model (P
 ---
 
 ### 4. `job_sources`
-**Purpose**: Registry of web job sources, APIs, RSS feeds, and connector configurations.
+**Purpose**: Registry of trusted web job sources, APIs, RSS feeds, and connector configurations.
 
 | Field | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
@@ -138,7 +103,7 @@ The Student Placement Portal relies on a structured relational database model (P
 | :--- | :--- | :--- | :--- |
 | `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Canonical Job ID |
 | `external_job_id`| VARCHAR(255)| NOT NULL | Source-provided job ID |
-| `source_id` | UUID | NOT NULL, FK → `job_sources(id)` | Originating job source |
+| `source_id` | UUID | NOT NULL, FK → `job_sources(id)` | Originating trusted job source |
 | `company_name` | VARCHAR(200) | NOT NULL | Standardized company name |
 | `title` | VARCHAR(200) | NOT NULL | Standardized job title |
 | `description` | TEXT | NOT NULL | Clean job description |
@@ -152,17 +117,15 @@ The Student Placement Portal relies on a structured relational database model (P
 | `max_backlogs` | INTEGER | NULL | Maximum backlogs allowed |
 | `required_skills`| TEXT[] | DEFAULT `{}` | Required skills array |
 | `original_source_url`| TEXT | NOT NULL | Original listing URL |
-| `apply_url` | TEXT | NOT NULL | Official application submission URL |
+| `apply_url` | TEXT | NOT NULL | Official external application URL |
 | `url_hash` | VARCHAR(64) | NOT NULL | SHA-256 hash of normalized apply URL |
 | `posted_date` | TIMESTAMPTZ | NULL | Employer publication date |
 | `closing_date` | TIMESTAMPTZ | NULL | Application deadline |
 | `status` | VARCHAR(30) | NOT NULL, DEFAULT `'PENDING_REVIEW'`| `PENDING_REVIEW`, `APPROVED`, etc. |
 | `verified_by_admin_id`| UUID| NULL, FK → `admins(id)` | Admin moderator ID |
 | `verified_at` | TIMESTAMPTZ | NULL | Verification timestamp |
-| `rejection_reason`| TEXT | NULL | Reason if rejected |
 | `first_discovered_at`| TIMESTAMPTZ| NOT NULL, DEFAULT `NOW()` | Initial discovery date |
 | `last_checked_at` | TIMESTAMPTZ| NOT NULL, DEFAULT `NOW()` | Last active health scan date |
-| `expired_at` | TIMESTAMPTZ | NULL | Timestamp when marked expired |
 
 ---
 
@@ -197,17 +160,19 @@ The Student Placement Portal relies on a structured relational database model (P
 
 ---
 
-### 9. `applications`
-**Purpose**: Local intent tracking for student job applications.
+### 9. `applications` (Self-Recorded External Application Tracker)
+**Purpose**: Allows students to track saved opportunities and self-record their external application progress.
 
 | Field | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- |
-| `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Tracker ID |
-| `student_id` | UUID | NOT NULL, FK → `students(id)` ON DELETE CASCADE | Student applicant |
-| `job_id` | UUID | NOT NULL, FK → `jobs(id)` ON DELETE CASCADE | Target job |
-| `status` | VARCHAR(30) | NOT NULL, DEFAULT `'SAVED'` | `SAVED`, `APPLIED_EXTERNAL` |
-| `applied_at` | TIMESTAMPTZ | NULL | Timestamp student marked applied |
-| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Record created date |
+| `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Record identifier |
+| `student_id` | UUID | NOT NULL, FK → `students(id)` ON DELETE CASCADE | Student user |
+| `job_id` | UUID | NOT NULL, FK → `jobs(id)` ON DELETE CASCADE | Associated job opportunity |
+| `status` | VARCHAR(30) | NOT NULL, DEFAULT `'INTERESTED'` | `INTERESTED`, `APPLIED`, `INTERVIEW`, `SELECTED`, `REJECTED` |
+| `notes` | TEXT | NULL | Personal student notes for this opportunity |
+| `self_reported_at`| TIMESTAMPTZ| NULL | Timestamp when student marked status |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Bookmarked / saved date |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Last status update date |
 
 ---
 
@@ -222,18 +187,15 @@ The Student Placement Portal relies on a structured relational database model (P
 | `target_entity` | VARCHAR(50) | NOT NULL | e.g., `jobs`, `job_sources` |
 | `target_id` | UUID | NULL | ID of entity acted upon |
 | `ip_address` | INET | NULL | Client IP address |
-| `user_agent` | TEXT | NULL | Browser / client identifier |
-| `metadata` | JSONB | DEFAULT `'{}'` | Additional action payload details |
+| `metadata` | JSONB | DEFAULT `'{}'` | Additional action details |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT `NOW()` | Audit entry timestamp |
 
 ---
 
-## Indexing Strategy & Performance Tuning
-
-To ensure sub-second query performance for student feeds and background scanner lookup:
+## Indexing Strategy
 
 ```sql
--- Fast student feed filtering by status, location, work mode, and publication date
+-- Fast student feed filtering by status and publication date
 CREATE INDEX idx_jobs_student_feed ON jobs (status, posted_date DESC) WHERE status = 'APPROVED';
 
 -- Quick duplicate check lookup using URL Hash
@@ -242,13 +204,9 @@ CREATE INDEX idx_jobs_url_hash ON jobs (url_hash);
 -- Fast lookup for scanner existing job check
 CREATE INDEX idx_jobs_external_source ON jobs (source_id, external_job_id);
 
--- Filter jobs by company name and title (trigram index for fast fuzzy searching)
-CREATE INDEX idx_jobs_company_trgm ON jobs USING gin (company_name gin_trgm_ops);
-CREATE INDEX idx_jobs_title_trgm ON jobs USING gin (title gin_trgm_ops);
-
--- Quick filtering of pending jobs for Admin review queue
+-- Pending queue filtering for Admin review
 CREATE INDEX idx_jobs_pending_queue ON jobs (status, first_discovered_at ASC) WHERE status = 'PENDING_REVIEW';
 
--- Audit log indexing
-CREATE INDEX idx_audit_logs_user_action ON audit_logs (user_id, action, created_at DESC);
+-- Application tracking lookup by student and status
+CREATE INDEX idx_applications_student_status ON applications (student_id, status);
 ```

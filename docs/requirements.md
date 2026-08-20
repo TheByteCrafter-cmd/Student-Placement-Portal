@@ -5,6 +5,8 @@ The **Student Placement Portal** is a near-real-time student placement intellige
 
 It empowers students by delivering verified, fresh, high-quality career and internship opportunities while maintaining direct links to original application sources. Institutional placement officers (Admins) retain full moderation control through a centralized Verification Queue to ensure only legitimate, relevant, and active job postings reach the student body.
 
+The primary workflow for students is **External Application Redirection**: students inspect curated job listings on the portal and click out to the official source/employer page to submit their application directly. The portal provides self-recorded application status tracking (`INTERESTED`, `APPLIED`, `INTERVIEW`, `SELECTED`, `REJECTED`) so students can organize their recruitment journey.
+
 ---
 
 ## System Architecture Pipeline Summary
@@ -12,6 +14,7 @@ It empowers students by delivering verified, fresh, high-quality career and inte
 Internet Job Sources (APIs, ATS, Company Career Pages, RSS)
                          ↓
             Job Discovery / Aggregation Engine
+           (Node.js Scheduled Execution Engine)
                          ↓
                Extraction & Parsing Layer
                          ↓
@@ -25,7 +28,7 @@ Internet Job Sources (APIs, ATS, Company Career Pages, RSS)
                          ↓
                 Approved Job Feed
                          ↓
-                  Student Portal
+           Student Portal (External Application Redirect)
 ```
 
 ---
@@ -33,13 +36,13 @@ Internet Job Sources (APIs, ATS, Company Career Pages, RSS)
 ## Core User Roles
 
 ### 1. Student
-Primary consumer of placement information. Students access curated job listings, track eligibility, maintain academic profiles, and apply directly via preserved original application URLs.
+Primary consumer of placement information. Students access curated job listings, track eligibility, maintain academic profiles, open official source URLs to apply on external platforms, and track their self-recorded application progress.
 
 ### 2. Admin (Placement Officer)
-Central verification and moderation authority. Admins manage job source connectors, review aggregated job listings in the verification queue, approve or reject postings, track source health, and oversee student placement metrics.
+Central verification and moderation authority. Admins manage trusted job source connectors, review aggregated job listings in the verification queue, approve or reject postings, track source health, and oversee student placement metrics.
 
 ### 3. Company / Recruiter (Future Scope)
-*Scope Evaluation*: A dedicated Company role is deferred to a future release phase. In Phase 0 & MVP, job opportunities are aggregated automatically or managed by Admins, eliminating the cold-start problem of requiring external recruiters to manually post jobs.
+*Scope Evaluation*: A dedicated Company role is deferred to a future release phase. In MVP, job opportunities are aggregated automatically or managed by Admins, eliminating the cold-start problem of requiring external recruiters to manually post jobs.
 
 ---
 
@@ -51,19 +54,25 @@ Central verification and moderation authority. Admins manage job source connecto
 - **Account Management**: Secure registration, login, logout, and password reset.
 - **Student Profile**: Academic information (degree, major, graduation year, CGPA, backlogs count), skills, certifications, and project showcase.
 - **Links Integration**: Verification and linking of external professional profiles (GitHub, LinkedIn, Portfolio).
-- **Resume Upload**: Upload and management of PDF resume with strict MIME-type validation.
+- **Resume Upload**: Upload and management of PDF resume with strict MIME-type and magic-byte validation.
 - **Approved Job Feed**: View, search, and filter admin-approved job openings by title, company, location, work mode, and eligibility.
 - **Job Details View**: View full job descriptions, required skills, salary package, eligibility criteria, and posting date.
-- **Direct Application Redirect**: One-click outbound link to the official original application URL in a secure new tab.
+- **Direct Application Redirect**: One-click outbound link opening the official external application URL in a secure new tab.
+- **Saved / Bookmarked Jobs**: Ability for students to bookmark job listings for quick access.
+- **Self-Recorded Application Tracking**: Ability for students to manually record and update their personal status for an opportunity:
+  - `INTERESTED` — Marked as an opportunity of interest.
+  - `APPLIED` — Student self-records that they submitted an external application.
+  - `INTERVIEW` — Student self-records receiving an interview call.
+  - `SELECTED` — Student self-records receiving a placement offer.
+  - `REJECTED` — Student self-records receiving a non-selection notice.
 
 #### SHOULD HAVE
 - **Eligibility Indicator**: Automated visual match indicator showing whether the student meets a job's CGPA, degree, and backlog requirements.
-- **Saved / Bookmarked Jobs**: Ability for students to bookmark job listings for quick access.
-- **Application Intent Tracking**: Simple "Mark as Applied" tracker so students can organize their external job applications.
+- **Application History Filter**: Filter student saved/tracked jobs by self-recorded status (`APPLIED`, `INTERVIEW`, `SELECTED`).
 
 #### FUTURE / ADVANCED
 - **AI Profile Match Score**: Automated match score comparing student profile skills with job description requirements.
-- **In-App Notifications**: Real-time push/email alerts for newly approved jobs matching student preferences.
+- **In-App & Email Notifications**: Real-time alerts for newly approved jobs matching student preferences or upcoming closing dates.
 - **Placement Analytics for Students**: Insights into top hiring skills and active recruiting companies.
 
 ---
@@ -80,7 +89,7 @@ Central verification and moderation authority. Admins manage job source connecto
   - **Edit Job**: Edit normalized job title, company, salary, experience, or description prior to approval.
   - **Mark as Expired**: Manually override and mark a job as `EXPIRED`.
 - **Original Source Inspection**: Quick preview of original source webpage and apply link during review.
-- **Source Management**: View configured job sources, monitor scan status, view last successful scan time, and toggle source active/inactive states.
+- **Trusted Source Management**: View configured job sources, monitor scan status, view last successful scan time, and toggle source active/inactive states.
 
 #### SHOULD HAVE
 - **Duplicate Inspection**: View duplicate detection flags and compare candidate duplicate jobs side-by-side.
@@ -96,7 +105,8 @@ Central verification and moderation authority. Admins manage job source connecto
 
 ## Non-Functional Requirements (NFRs)
 
-1. **Security & Data Integrity**
+1. **Security & Source Segregation**
+   - Explicit segregation between **Trusted/Configured Job Sources** (scanned server-side with SSRF protection) and **User-submitted external URLs** (never fetched server-side).
    - Defense against OWASP Top 10 vulnerabilities (SQLi, XSS, CSRF, Auth bypass).
    - Strict Server-Side Request Forgery (SSRF) controls for job source fetching.
    - Secure URL sanitization and outbound link validation.
@@ -108,12 +118,13 @@ Central verification and moderation authority. Admins manage job source connecto
 
 3. **Performance & Freshness**
    - Near-real-time job updates via configurable scan intervals (15m, 30m, 1h).
+   - **MVP Scheduler**: Node.js-based scheduled jobs (`node-cron` or built-in task scheduler) with per-source scheduling, timeouts, and retry handling.
+   - **Future Scalability**: BullMQ + Redis worker queues introduced when source count, concurrency, or volume demands it.
    - Student feed search and filter response time < 300ms.
    - Database queries optimized with comprehensive indexing.
 
 4. **Scalability**
    - Architecture supporting seamless extension from 10 sources to 100+ sources without core system rewrite.
-   - Background worker queue handling asynchronous fetch and normalization workloads.
 
 5. **Usability & Compliance**
    - Mobile-responsive, accessible UI (WCAG 2.1 AA compliant design concepts).

@@ -21,7 +21,7 @@ Priority 4: RSS / Atom Feeds (Legitimate public job syndication feeds)
 Priority 5: Controlled Web Extraction (Restricted, targeted extraction only when no API/feed exists)
 ```
 
-> **Design Principle**: The architecture avoids unrestricted or illegal web scraping. Source connectors interface primarily with structured endpoints and public APIs.
+> **Design Principle**: The architecture avoids unrestricted or illegal web scraping. Source connectors interface primarily with structured endpoints and public APIs configured by administrators.
 
 ---
 
@@ -59,19 +59,6 @@ interface SourceConnector {
 }
 ```
 
-### Connector Pipeline Flow
-```
-SourceConnector
-     ↓
-Fetcher Component (HTTP Client with SSRF protection & Rate Limiter)
-     ↓
-Parser Component (JSON / XML / DOM Parser)
-     ↓
-Normalizer Component (Maps fields to Canonical Schema)
-     ↓
-Canonical Job Object
-```
-
 ---
 
 ## 3. Canonical Job Data Model
@@ -106,7 +93,7 @@ All job listings are transformed into a standardized canonical format regardless
 
 #### D. URLs & Timestamps
 - `original_source_url` (URL): Direct link to the source post page.
-- `apply_url` (URL): Direct link where students submit their application.
+- `apply_url` (URL): Direct link where students submit their application on the external platform.
 - `posted_date` (Timestamp, Optional): Date job was originally published by employer.
 - `closing_date` (Timestamp, Optional): Application deadline.
 - `first_discovered_at` (Timestamp): System discovery timestamp.
@@ -148,98 +135,46 @@ Every job transitions through well-defined lifecycle states governed by strict v
     ARCHIVED
 ```
 
-### State Definitions & Transitions
-1. **`DISCOVERED`**: Initial state when candidate payload is received by the scanner.
-2. **`PENDING_REVIEW`**: Job is normalized, validated, checked for duplicates, and queued in the Admin Verification Queue.
-3. **`APPROVED`**: Admin verifies listing authenticity, relevance, and criteria.
-4. **`REJECTED`**: Admin rejects invalid, low-quality, or spam job posting.
-5. **`PUBLISHED`**: Job is active and visible on the Student Feed.
-6. **`HIDDEN`**: Temporarily hidden by Admin or system alert.
-7. **`EXPIRED`**: Closing date reached, application link dead, or job removed from source.
-8. **`ARCHIVED`**: Retained for historical placement analytics.
-
 ---
 
-## 5. Field Normalization Layer
+## 5. Scheduler & Scan Engine Architecture
 
-Different sources use disparate field names and formats. The Normalization Engine transforms raw inputs into unified canonical representations:
-
-| Raw Source Input Examples | Canonical Field | Normalization Strategy |
-| :--- | :--- | :--- |
-| `"SDE 1"`, `"Software Developer - I"`, `"Junior Dev"` | `title` | Title cleaning, trimming, and standard capitalization. |
-| `"Google India LLC"`, `"Google Inc"` | `company_name` | Corporate suffix stripping (`Inc`, `LLC`, `Pvt Ltd`) for uniform matching. |
-| `"B.E / B.Tech in CS"`, `"Bachelor of Technology"` | `degree_eligibility` | Canonical array mapping: `["B.Tech", "BE"]`. |
-| `"Work from Home"`, `"Remote - India"`, `"Onsite"` | `work_mode` | Mapped to `REMOTE`, `HYBRID`, or `ON_SITE`. |
-| `"10-12 LPA"`, `"₹50k/pm"`, `"Stipend: 25000"` | `salary_package` | Extracted into clean display strings & searchable numeric range bounds. |
-
----
-
-## 6. Duplicate Detection Strategy
-
-Because the same job opening may be listed on multiple websites, a multi-stage duplicate detection algorithm prevents feed clutter:
+### A. MVP Architecture (Node.js Scheduled Execution)
+For the MVP, scanning is orchestrated using a lightweight **Node.js-based scheduler** (`node-cron` or built-in scheduled task manager):
+- **Configurable Intervals**: Scans execute per source based on configured intervals (15m, 30m, 1h).
+- **Per-Source Scheduling**: Each source maintains its own last-run timestamp and target scan schedule.
+- **Overlap Prevention**: In-memory task locks ensure a scan job for a specific source does not execute concurrently if a previous run is still processing.
+- **Retry & Timeout Handling**: Outbound HTTP requests enforce a strict 10-second timeout per source call with exponential backoff on transient network failures.
 
 ```
-Incoming Job Candidate
-         │
-         ├──► 1. Exact Match Check (External Job ID + Source ID) ──► Mark as Duplicate / Update existing
-         │
-         ├──► 2. URL Fingerprint Match (Canonical Apply URL hash) ──► Flag Exact Duplicate
-         │
-         └──► 3. Probable Match Heuristic (Company + Title Similarity + Location)
-                     │
-                     ├─ Score ≥ 85% ──► Link as Duplicate (Queue for Admin Review)
-                     └─ Score < 85% ──► Treat as Unique Job Opening
-```
-
-### Matching Tiers
-1. **Exact Duplicate**: Same `external_job_id` from the same source or identical normalized `apply_url`. Automatically merged/updated without creating a new listing.
-2. **Probable Duplicate**: Same company, >85% title similarity (Jaro-Winkler/Levenshtein metric), and matching location from a different source. Flagged for Admin side-by-side comparison.
-3. **Distinct Opening**: Same company, different title or location. Processed as a separate job listing.
-
----
-
-## 7. Expiry & Active Status Monitoring
-
-The system ensures job postings remain fresh and removes dead listings through multi-signal checking:
-
-### Expiry Signals
-- **Explicit Closing Date**: Current timestamp > `closing_date`.
-- **Source Status Signal**: Source API explicitly returns `closed` or `inactive`.
-- **HTTP 404 / 410 Response**: Original application URL or job page returns client error.
-- **Repeated Scan Absence**: Job missing from source feed across 3 consecutive scans.
-
-### Safety Thresholds
-To prevent temporary network glitches from wrongly expiring jobs:
-- A job is marked **`POSSIBLY_EXPIRED`** after 1 scan absence or HTTP timeout.
-- A job is marked **`EXPIRED`** only after 3 consecutive failures or explicit HTTP 404 validation.
-
----
-
-## 8. Scheduler & Scan Engine Architecture
-
-The scan engine executes background job polling in configurable near-real-time intervals.
-
-```
-       [Configurable Scheduler (Node-cron / BullMQ)]
+       [Node.js Scheduled Task Manager (MVP)]
                          │
                          ├─ Every 15 minutes (High-Priority APIs)
                          ├─ Every 30 minutes (Standard Feeds)
                          └─ Every 1 hour (Company Career Pages)
                          │
                          ▼
-             Scan Job Dispatcher
+             Scan Task Dispatcher
                          │
             ┌────────────┼────────────┐
             ▼            ▼            ▼
-       Source A     Source B     Source C  (Concurrent Isolated Execution)
-            │            │            │
-            └────────────┼────────────┘
-                         ▼
-        Scan Execution Logger & Source Health Update
+       Source A     Source B     Source C  (Isolated Execution Contexts)
 ```
 
-### Key Operational Controls
-- **Overlap Prevention**: Distributed mutex locking (`source_id` lock) ensures a scan job for a specific source cannot run concurrently if a previous scan is still processing.
-- **Circuit Breaker & Backoff**: If a source fails 3 consecutive times, it enters `DEGRADED` state with exponential backoff (e.g., poll interval increases from 15m → 2h) to avoid rate limits or IP bans.
-- **Source Health Metrics**: Tracked metrics include `last_successful_scan`, `consecutive_failures`, `total_jobs_found`, and `avg_response_time_ms`.
-- **Failure Isolation**: Each source execution is wrapped in isolated `try-catch` boundary contexts. An error in Source A will **never** stop Source B or crash the main application.
+### B. Future Scalability Architecture (BullMQ + Redis)
+When source volume, scan frequency, or worker distribution demands dedicated background queue infrastructure, the engine seamlessly upgrades to a **BullMQ + Redis** worker queue architecture:
+- Distributed background workers handling concurrent queue processing.
+- Persistent job retry queues and dead-letter queues.
+- Admin metric monitoring for active, waiting, and failed queue jobs.
+
+---
+
+## 6. Duplicate Detection & Expiry Strategy
+
+### Duplicate Detection
+- **Exact Duplicate**: Matched by SHA-256 `url_hash` of the normalized `apply_url` or identical `external_job_id` from the same source.
+- **Probable Duplicate**: Candidate matching same company, >85% normalized title similarity, and location. Flagged for Admin side-by-side verification.
+
+### Expiry Detection
+- **Explicit Expiry**: Current date > `closing_date` or source API returns `closed`.
+- **Scan Absence**: Job missing from source across 3 consecutive scans triggers transition to `EXPIRED`.
