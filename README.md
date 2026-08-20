@@ -4,6 +4,30 @@ A real-time / near-real-time student placement intelligence platform that discov
 
 ---
 
+## ⚡ Core Job Intelligence Pipeline
+
+```
+Online Sources
+      ↓
+Near-Real-Time Scanner
+      ↓
+SourceConnector
+      ↓
+Normalization
+      ↓
+Duplicate / Expiry Detection
+      ↓
+PENDING_REVIEW
+      ↓
+ADMIN APPROVAL
+      ↓
+STUDENT PORTAL
+      ↓
+Official Apply URL
+```
+
+---
+
 ## 🌟 Key Architecture & Vision
 
 - **Automated Aggregation Engine**: Scheduled near-real-time polling engine scanning job APIs, ATS feeds, company career pages, and public RSS feeds (polling intervals: 15m, 30m, 1h).

@@ -5,6 +5,30 @@ The Job Aggregation Engine is the core intelligence component of the Student Pla
 
 ---
 
+## Core Pipeline Flow
+
+```
+Online Sources
+      ↓
+Near-Real-Time Scanner
+      ↓
+SourceConnector
+      ↓
+Normalization
+      ↓
+Duplicate / Expiry Detection
+      ↓
+PENDING_REVIEW
+      ↓
+ADMIN APPROVAL
+      ↓
+STUDENT PORTAL
+      ↓
+Official Apply URL
+```
+
+---
+
 ## 1. Job Source Hierarchy & Strategy
 
 To maintain high data quality, legal compliance, and system stability, the platform enforces a strict source hierarchy:
