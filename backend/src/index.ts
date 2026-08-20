@@ -1,14 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { config } from './config/env';
 import healthRoutes from './routes/health.routes';
+import authRoutes from './routes/auth.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { testDatabaseConnection } from './config/db';
+import { initUserTable } from './models/user.model';
+import { seedAdminUser } from './db/seedAdmin';
 
 const app = express();
 
-// Security & Parsing Middleware
+// Security & Cookie Middleware
 app.use(helmet());
 app.use(
   cors({
@@ -16,18 +20,30 @@ app.use(
     credentials: true,
   })
 );
+app.use(cookieParser(config.cookieSecret));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // API Routes
 app.use('/api', healthRoutes);
+app.use('/api/auth', authRoutes);
+
+// Protected Demo Verification Routes mounted under /api/admin & /api/student
+app.use('/api', authRoutes);
 
 // Root Fallback Route
 app.get('/', (req, res) => {
   res.json({
     message: 'Student Placement Portal Backend API Service',
-    phase: 'Phase 1 - Project Setup & Foundation',
-    healthCheck: '/api/health',
+    phase: 'Phase 2 - Authentication & Role-Based Access Control',
+    endpoints: {
+      health: '/api/health',
+      register: '/api/auth/register',
+      login: '/api/auth/login',
+      me: '/api/auth/me',
+      adminTest: '/api/admin/test',
+      studentTest: '/api/student/test',
+    },
   });
 });
 
@@ -54,7 +70,10 @@ const server = app.listen(config.port, async () => {
   console.log(`🏥 Health Check: http://localhost:${config.port}/api/health`);
   console.log(`====================================================`);
 
-  // Perform initial database connection check
+  // Initialize DB Schema & Admin Seed
+  await initUserTable();
+  await seedAdminUser();
+
   const dbHealth = await testDatabaseConnection();
   if (dbHealth.connected) {
     console.log(`✅ Database Status: CONNECTED to PostgreSQL (${dbHealth.database} at ${dbHealth.host})`);
