@@ -17,18 +17,31 @@ Phase 2 establishes the core authentication and authorization architecture for t
               ┌─────────────────────┐       ┌─────────────────────┐
               │    STUDENT Role     │       │     ADMIN Role      │
               ├─────────────────────┤       ├─────────────────────┤
-              │ • Public Register   │       │ • Bootstrapped Seed │
-              │ • Access /student/* │       │ • Access /admin/*   │
-              │ • Blocked /admin/*  │       │ • Blocked /student/*│
+              │ • Public Register   │       │ • Bootstrapped via  │
+              │ • Access /student/* │       │   Environment Vars  │
+              │ • Blocked /admin/*  │       │ • Access /admin/*   │
+              │                     │       │ • Blocked /student/*│
               └─────────────────────┘       └─────────────────────┘
 ```
 
 1. **STUDENT**: Created via public registration (`POST /api/auth/register`). Client attempts to supply `role = ADMIN` are strictly overridden and ignored.
-2. **ADMIN**: Created exclusively via controlled environment seeding (`ADMIN_EMAIL`, `ADMIN_PASSWORD`) or administrative bootstrapping. Unauthenticated public admin registration is prohibited.
+2. **ADMIN**: Bootstrapped securely via environment variables (`ADMIN_EMAIL`, `ADMIN_PASSWORD`). Unauthenticated public admin registration is strictly prohibited.
 
 ---
 
-## 2. Security & Token Strategy
+## 2. Admin Account Bootstrap Strategy
+
+Admin accounts are created securely via environment variable configuration without hardcoded secrets:
+
+1. Copy `.env.example` to `.env`.
+2. Set your target `ADMIN_EMAIL` (e.g. `admin@institution.edu`).
+3. Set a strong `ADMIN_PASSWORD` (min 8 characters).
+4. On server start, the system reads `ADMIN_EMAIL` and `ADMIN_PASSWORD`. If no admin account exists for that email, it hashes the password securely using bcrypt and bootstraps the admin account.
+5. If an admin account already exists, the bootstrap process does nothing (existing passwords are never overwritten or logged).
+
+---
+
+## 3. Security & Token Strategy
 
 - **Password Hashing**: `bcryptjs` with cost factor 12. Plaintext passwords are never stored, logged, or returned in API payloads.
 - **Session Transport**: JWT access tokens stored in **HTTP-only, Secure, SameSite=Lax** cookies (`access_token`).
@@ -38,7 +51,7 @@ Phase 2 establishes the core authentication and authorization architecture for t
 
 ---
 
-## 3. Database Schema (`users` table)
+## 4. Database Schema (`users` table)
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -57,7 +70,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 
 ---
 
-## 4. API Endpoint Summary
+## 5. API Endpoint Summary
 
 | Method | Endpoint | Access | Description |
 | :--- | :--- | :--- | :--- |

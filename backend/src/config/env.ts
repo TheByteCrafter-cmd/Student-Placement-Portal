@@ -19,11 +19,11 @@ export const config = {
   dbName: process.env.POSTGRES_DB || 'placement_portal',
   
   // JWT & Cookie Configuration
-  jwtSecret: process.env.JWT_SECRET || 'super-secret-jwt-placement-portal-key-2026',
+  jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret-replace-in-production-env',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
-  cookieSecret: process.env.COOKIE_SECRET || 'cookie-secret-key-placement-portal',
+  cookieSecret: process.env.COOKIE_SECRET || 'dev-cookie-secret-replace-in-production-env',
   
-  // Admin Seed Credentials (for dev/bootstrap)
-  adminEmail: process.env.ADMIN_EMAIL || 'admin@placement.edu',
-  adminPassword: process.env.ADMIN_PASSWORD || 'Admin@Placement2026!',
+  // Admin Bootstrap Credentials (Environment Variables Only - No Hardcoded Secrets)
+  adminEmail: process.env.ADMIN_EMAIL || '',
+  adminPassword: process.env.ADMIN_PASSWORD || '',
 };

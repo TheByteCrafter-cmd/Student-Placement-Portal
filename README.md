@@ -4,50 +4,28 @@ A real-time / near-real-time student placement intelligence platform that discov
 
 ---
 
-## 🚀 Phase 1 Foundation & Development Setup
+## 🚀 Phase 2 Authentication & Security Setup
 
-### Project Structure
-```
-F:\Student Placement Portal\
-├── frontend/                # React + TypeScript + Vite Application
-│   ├── src/                 # Phase 1 Status Dashboard & UI Components
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.ts
-├── backend/                 # Node.js + Express + TypeScript Backend API
-│   ├── src/
-│   │   ├── config/          # Centralized Config & Database Health Monitor
-│   │   ├── middleware/      # Security (Helmet, CORS) & Error Handler
-│   │   ├── routes/          # /api/health Endpoint Controller
-│   │   └── index.ts         # Main Express Server Entrypoint
-│   ├── package.json
-│   └── tsconfig.json
-├── docs/                    # Phase 0 Architecture Specifications & Blueprints
-├── .env.example             # Environment Variable Template
-├── .gitignore               # Full-Stack Git Ignore Rules
-└── README.md                # Project Overview & Quick Start Instructions
-```
+### 1. Environment & Admin Bootstrap Configuration
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Configure your JWT secret, cookie secret, and initial Admin bootstrap credentials in `.env`:
+   ```env
+   JWT_SECRET=your_strong_jwt_secret_key_here
+   COOKIE_SECRET=your_cookie_signing_secret_here
+
+   ADMIN_EMAIL=admin@your-institution.edu
+   ADMIN_PASSWORD=your_secure_admin_password_here
+   ```
+3. On backend server startup, the system reads `ADMIN_EMAIL` and `ADMIN_PASSWORD` from the environment and bootstraps the initial Admin user safely (with bcrypt password hashing). If an admin account already exists, existing passwords are never overwritten or logged.
 
 ---
 
 ## ⚙️ How to Run Locally
 
-### 1. Manual PostgreSQL Database Setup (Dependency)
-PostgreSQL is configured as the core database engine. If PostgreSQL is not yet running on your local machine:
-1. Install PostgreSQL Server (version 14+) or start the local service on default port `5432`.
-2. Create local database: `placement_portal`.
-3. Configure credentials in your root `.env` file (copied from `.env.example`):
-   ```env
-   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/placement_portal
-   POSTGRES_HOST=localhost
-   POSTGRES_PORT=5432
-   POSTGRES_USER=postgres
-   POSTGRES_PASSWORD=postgres
-   POSTGRES_DB=placement_portal
-   ```
-*(Note: If PostgreSQL is offline/unreachable during local development, the backend automatically detects it, logs a warning, and returns a graceful `degraded` health status via `/api/health` without crashing.)*
-
-### 2. Backend Server Setup
+### 1. Backend Server Setup
 ```bash
 cd backend
 npm install
@@ -56,7 +34,7 @@ npm run dev
 The backend API server starts at `http://localhost:5000`.
 - Health Check Endpoint: `http://localhost:5000/api/health`
 
-### 3. Frontend Client Setup
+### 2. Frontend Client Setup
 ```bash
 cd frontend
 npm install
@@ -77,8 +55,8 @@ The frontend SPA starts at `http://localhost:5173`.
 ## 📅 21-Phase Development Roadmap
 
 - [x] **Phase 0 — Requirements & Architecture**
-- [x] **Phase 1 — Project Setup & Foundation** *(Completed)*
-- [ ] **Phase 2 — Authentication**
+- [x] **Phase 1 — Project Setup & Foundation**
+- [x] **Phase 2 — Authentication & Role-Based Access Control (RBAC)** *(Completed)*
 - [ ] **Phase 3 — Student Module**
 - [ ] **Phase 4 — Admin Module**
 - [ ] **Phase 5 — Job Database**

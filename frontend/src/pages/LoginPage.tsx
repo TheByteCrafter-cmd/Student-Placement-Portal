@@ -16,15 +16,8 @@ export const LoginPage: React.FC = () => {
     setIsSubmitting(false);
 
     if (success) {
-      // Redirect based on user role handled after state update
       navigate('/');
     }
-  };
-
-  const fillQuickAccount = (accountEmail: string, accountPass: string) => {
-    clearError();
-    setEmail(accountEmail);
-    setPassword(accountPass);
   };
 
   return (
@@ -42,7 +35,7 @@ export const LoginPage: React.FC = () => {
             type="email"
             value={email}
             onChange={(e) => { clearError(); setEmail(e.target.value); }}
-            placeholder="student@placement.edu"
+            placeholder="user@institution.edu"
             required
           />
         </div>
@@ -62,19 +55,6 @@ export const LoginPage: React.FC = () => {
           {isSubmitting ? 'Authenticating...' : 'Sign In'}
         </button>
       </form>
-
-      <div className="dev-accounts-hint">
-        <h4>⚡ Quick Development Accounts</h4>
-        <div className="hint-buttons">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => fillQuickAccount('admin@placement.edu', 'Admin@Placement2026!')}
-          >
-            Fill Admin Credentials
-          </button>
-        </div>
-      </div>
 
       <div className="auth-footer">
         Need a student account? <Link to="/register">Register as Student</Link>
