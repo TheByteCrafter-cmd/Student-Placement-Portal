@@ -142,6 +142,35 @@ export async function createUser(data: {
 }
 
 /**
+ * Updates user account active status (Activate / Deactivate)
+ */
+export async function updateUserStatus(id: string, isActive: boolean): Promise<UserRecord | null> {
+  const now = new Date();
+  const dbHealth = await testDatabaseConnection();
+
+  if (dbHealth.connected) {
+    try {
+      const res = await pool.query(
+        'UPDATE users SET is_active = $1, updated_at = $2 WHERE id = $3 RETURNING id, email, password_hash, role, is_active, created_at, updated_at, last_login_at',
+        [isActive, now, id]
+      );
+      if (res.rows.length > 0) return res.rows[0];
+    } catch (err: any) {
+      console.error('Error updating user active status:', err.message);
+    }
+  }
+
+  const inMemoryUser = inMemoryUsers.get(id);
+  if (inMemoryUser) {
+    inMemoryUser.is_active = isActive;
+    inMemoryUser.updated_at = now;
+    return inMemoryUser;
+  }
+
+  return null;
+}
+
+/**
  * Updates last_login_at timestamp
  */
 export async function updateLastLogin(id: string): Promise<void> {

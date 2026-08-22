@@ -4,9 +4,9 @@ A real-time / near-real-time student placement intelligence platform that discov
 
 ---
 
-## 🚀 Phase 2 Authentication & Security Setup
+## 🚀 Phase 4 — Admin Control Center & Moderation
 
-### 1. Environment & Admin Bootstrap Configuration
+### 1. Environment & Setup
 1. Copy `.env.example` to `.env`:
    ```bash
    cp .env.example .env
@@ -19,7 +19,7 @@ A real-time / near-real-time student placement intelligence platform that discov
    ADMIN_EMAIL=admin@your-institution.edu
    ADMIN_PASSWORD=your_secure_admin_password_here
    ```
-3. On backend server startup, the system reads `ADMIN_EMAIL` and `ADMIN_PASSWORD` from the environment and bootstraps the initial Admin user safely (with bcrypt password hashing). If an admin account already exists, existing passwords are never overwritten or logged.
+3. On backend server startup, the system reads `ADMIN_EMAIL` and `ADMIN_PASSWORD` from the environment and bootstraps the initial Admin user safely (with bcrypt password hashing).
 
 ---
 
@@ -33,6 +33,7 @@ npm run dev
 ```
 The backend API server starts at `http://localhost:5000`.
 - Health Check Endpoint: `http://localhost:5000/api/health`
+- Admin Dashboard API: `http://localhost:5000/api/admin/dashboard`
 
 ### 2. Frontend Client Setup
 ```bash
@@ -41,6 +42,7 @@ npm install
 npm run dev
 ```
 The frontend SPA starts at `http://localhost:5173`.
+- Admin Control Center: `http://localhost:5173/admin`
 
 ---
 
@@ -56,9 +58,9 @@ The frontend SPA starts at `http://localhost:5173`.
 
 - [x] **Phase 0 — Requirements & Architecture**
 - [x] **Phase 1 — Project Setup & Foundation**
-- [x] **Phase 2 — Authentication & Role-Based Access Control (RBAC)** *(Completed)*
-- [ ] **Phase 3 — Student Module**
-- [ ] **Phase 4 — Admin Module**
+- [x] **Phase 2 — Authentication & Role-Based Access Control (RBAC)**
+- [x] **Phase 3 — Student Profile & Resume Management**
+- [x] **Phase 4 — Admin Control Center & Moderation** *(Completed)*
 - [ ] **Phase 5 — Job Database**
 - [ ] **Phase 6 — Real-Time Job Aggregation**
 - [ ] **Phase 7 — Extraction & Normalization**

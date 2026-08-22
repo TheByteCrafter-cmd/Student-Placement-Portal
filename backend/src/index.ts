@@ -6,11 +6,15 @@ import { config } from './config/env';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import studentRoutes from './routes/student.routes';
+import adminRoutes from './routes/admin.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { testDatabaseConnection } from './config/db';
 import { initUserTable } from './models/user.model';
 import { initStudentTable } from './models/student.model';
 import { initResumeTable } from './models/resume.model';
+import { initAuditLogTable } from './models/audit.model';
+import { initSourceTable } from './models/source.model';
+import { initJobTable } from './models/job.model';
 import { seedAdminUser } from './db/seedAdmin';
 
 const app = express();
@@ -31,20 +35,21 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
-
-// Protected Demo Verification Routes mounted under /api/admin & /api/student
-app.use('/api', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Root Fallback Route
 app.get('/', (req, res) => {
   res.json({
     message: 'Student Placement Portal Backend API Service',
-    phase: 'Phase 3 - Student Profile & Resume Management',
+    phase: 'Phase 4 - Admin Control Center & Moderation',
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
       studentProfile: '/api/students/profile',
-      studentResumes: '/api/students/resumes',
+      adminDashboard: '/api/admin/dashboard',
+      adminStudents: '/api/admin/students',
+      adminJobsPending: '/api/admin/jobs/pending',
+      adminAuditLogs: '/api/admin/audit-logs',
     },
   });
 });
@@ -76,6 +81,9 @@ const server = app.listen(config.port, async () => {
   await initUserTable();
   await initStudentTable();
   await initResumeTable();
+  await initAuditLogTable();
+  await initSourceTable();
+  await initJobTable();
   await seedAdminUser();
 
   const dbHealth = await testDatabaseConnection();
