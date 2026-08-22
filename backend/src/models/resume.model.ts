@@ -36,9 +36,12 @@ export async function initResumeTable(): Promise<void> {
       file_path VARCHAR(500) NOT NULL,
       mime_type VARCHAR(100) NOT NULL CHECK (mime_type = 'application/pdf'),
       file_size INTEGER NOT NULL CHECK (file_size > 0 AND file_size <= 5242880),
-      is_primary BOOLEAN NOT NULL DEFAULT true,
+      is_primary BOOLEAN NOT NULL DEFAULT false,
       uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Additive column migration
+    ALTER TABLE resumes ADD COLUMN IF NOT EXISTS is_primary BOOLEAN NOT NULL DEFAULT false;
 
     CREATE INDEX IF NOT EXISTS idx_resumes_user_id ON resumes(user_id);
   `;
@@ -52,7 +55,7 @@ export async function initResumeTable(): Promise<void> {
 }
 
 /**
- * Saves a new resume record
+ * Saves a new resume record (Sets as primary if first resume)
  */
 export async function createResumeRecord(data: {
   userId: string;
@@ -63,28 +66,21 @@ export async function createResumeRecord(data: {
   mimeType?: string;
 }): Promise<ResumeRecord> {
   const dbHealth = await testDatabaseConnection();
+  const existingResumes = await getResumesByUserId(data.userId);
+  const isPrimary = existingResumes.length === 0;
 
   if (dbHealth.connected) {
-    // Unset primary flag for existing resumes if setting primary
-    await pool.query('UPDATE resumes SET is_primary = false WHERE user_id = $1', [data.userId]);
-
     const res = await pool.query(
       `INSERT INTO resumes (user_id, original_filename, stored_filename, file_path, mime_type, file_size, is_primary)
-       VALUES ($1, $2, $3, $4, $5, $6, true)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, user_id, original_filename, stored_filename, file_path, mime_type, file_size, is_primary, uploaded_at`,
-      [data.userId, data.originalFilename, data.storedFilename, data.filePath, data.mimeType || 'application/pdf', data.fileSize]
+      [data.userId, data.originalFilename, data.storedFilename, data.filePath, data.mimeType || 'application/pdf', data.fileSize, isPrimary]
     );
 
     return res.rows[0];
   }
 
   // In-memory fallback
-  for (const r of inMemoryResumes.values()) {
-    if (r.user_id === data.userId) {
-      r.is_primary = false;
-    }
-  }
-
   const record: ResumeRecord = {
     id: uuidv4(),
     user_id: data.userId,
@@ -93,12 +89,64 @@ export async function createResumeRecord(data: {
     file_path: data.filePath,
     mime_type: data.mimeType || 'application/pdf',
     file_size: data.fileSize,
-    is_primary: true,
+    is_primary: isPrimary,
     uploaded_at: new Date(),
   };
 
   inMemoryResumes.set(record.id, record);
   return record;
+}
+
+/**
+ * Sets a specific resume as Primary for a student, unsetting any previous primary resume
+ */
+export async function setPrimaryResume(resumeId: string, userId: string): Promise<ResumeRecord | null> {
+  const dbHealth = await testDatabaseConnection();
+
+  if (dbHealth.connected) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Verify ownership
+      const checkRes = await client.query('SELECT id FROM resumes WHERE id = $1 AND user_id = $2', [resumeId, userId]);
+      if (checkRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      // Unset all existing primary flags for user
+      await client.query('UPDATE resumes SET is_primary = false WHERE user_id = $1', [userId]);
+
+      // Set target resume as primary
+      const updateRes = await client.query(
+        'UPDATE resumes SET is_primary = true WHERE id = $1 AND user_id = $2 RETURNING id, user_id, original_filename, stored_filename, file_path, mime_type, file_size, is_primary, uploaded_at',
+        [resumeId, userId]
+      );
+
+      await client.query('COMMIT');
+      return updateRes.rows[0];
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // In-memory fallback
+  const target = inMemoryResumes.get(resumeId);
+  if (!target || target.user_id !== userId) {
+    return null;
+  }
+
+  for (const r of inMemoryResumes.values()) {
+    if (r.user_id === userId) {
+      r.is_primary = r.id === resumeId;
+    }
+  }
+
+  return target;
 }
 
 /**

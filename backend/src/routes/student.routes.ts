@@ -7,6 +7,7 @@ import { requireAuth, requireRole } from '../middleware/auth.middleware';
 import {
   getStudentByUserId,
   upsertStudentProfile,
+  calculateProfileCompletion,
   StudentProfileInput,
 } from '../models/student.model';
 import {
@@ -14,6 +15,7 @@ import {
   getResumesByUserId,
   getResumeById,
   deleteResumeRecord,
+  setPrimaryResume,
   sanitizeResume,
 } from '../models/resume.model';
 import {
@@ -40,17 +42,20 @@ const upload = multer({
 
 /**
  * GET /api/students/profile
- * Retrieves profile of current authenticated student
+ * Retrieves profile & profile completion score of current authenticated student
  */
 router.get('/profile', requireAuth, requireRole('STUDENT'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const profile = await getStudentByUserId(userId);
+    const resumes = await getResumesByUserId(userId);
+    const profileCompletion = calculateProfileCompletion(profile, resumes.length > 0);
 
     return res.status(200).json({
       success: true,
       data: {
         profile,
+        profile_completion: profileCompletion,
       },
     });
   } catch (err: any) {
@@ -64,11 +69,13 @@ router.get('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
 
 /**
  * PUT /api/students/profile
- * Creates or updates student profile for current authenticated student
+ * Explicit field mapping & validation for student profile
  */
 router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
+
+    // Explicit field mapping to prevent mass assignment security vulnerabilities
     const {
       first_name,
       last_name,
@@ -79,12 +86,16 @@ router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
       cgpa,
       active_backlogs,
       skills,
+      phone_number,
+      tenth_percentage,
+      twelfth_percentage,
+      diploma_percentage,
       github_url,
       linkedin_url,
       portfolio_url,
     } = req.body;
 
-    // Field Validation
+    // 1. Required Personal & Academic Text Validation
     if (!first_name || typeof first_name !== 'string' || first_name.trim().length === 0) {
       return res.status(400).json({
         success: false,
@@ -120,11 +131,12 @@ router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
       });
     }
 
+    // 2. Numeric Range Validations
     const gradYearNum = parseInt(graduation_year, 10);
     if (isNaN(gradYearNum) || gradYearNum < 1990 || gradYearNum > 2100) {
       return res.status(400).json({
         success: false,
-        error: { code: 'INVALID_INPUT', message: 'Please enter a valid graduation year.' },
+        error: { code: 'INVALID_INPUT', message: 'Please enter a valid graduation year (1990 - 2100).' },
       });
     }
 
@@ -144,7 +156,53 @@ router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
       });
     }
 
-    // URL Protocol Security Validation (HTTP/HTTPS only)
+    // 3. Placement Academic Percentages Validation (0 to 100 or null)
+    let tenthNum: number | null = null;
+    if (tenth_percentage !== undefined && tenth_percentage !== null && tenth_percentage !== '') {
+      tenthNum = parseFloat(tenth_percentage);
+      if (isNaN(tenthNum) || tenthNum < 0.0 || tenthNum > 100.0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: '10th percentage must be between 0.00 and 100.00.' },
+        });
+      }
+    }
+
+    let twelfthNum: number | null = null;
+    if (twelfth_percentage !== undefined && twelfth_percentage !== null && twelfth_percentage !== '') {
+      twelfthNum = parseFloat(twelfth_percentage);
+      if (isNaN(twelfthNum) || twelfthNum < 0.0 || twelfthNum > 100.0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: '12th percentage must be between 0.00 and 100.00.' },
+        });
+      }
+    }
+
+    let diplomaNum: number | null = null;
+    if (diploma_percentage !== undefined && diploma_percentage !== null && diploma_percentage !== '') {
+      diplomaNum = parseFloat(diploma_percentage);
+      if (isNaN(diplomaNum) || diplomaNum < 0.0 || diplomaNum > 100.0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Diploma percentage must be between 0.00 and 100.00.' },
+        });
+      }
+    }
+
+    // 4. Phone Number Validation
+    let cleanPhone: string | null = null;
+    if (phone_number && typeof phone_number === 'string' && phone_number.trim().length > 0) {
+      cleanPhone = phone_number.trim();
+      if (cleanPhone.length < 7 || cleanPhone.length > 20) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_INPUT', message: 'Phone number must be between 7 and 20 characters.' },
+        });
+      }
+    }
+
+    // 5. URL Security Validation (HTTP/HTTPS only)
     if (github_url && !isValidHttpUrl(github_url)) {
       return res.status(400).json({
         success: false,
@@ -176,6 +234,10 @@ router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
       cgpa: cgpaNum,
       active_backlogs: backlogsNum,
       skills: Array.isArray(skills) ? skills : typeof skills === 'string' ? skills.split(',') : [],
+      phone_number: cleanPhone,
+      tenth_percentage: tenthNum,
+      twelfth_percentage: twelfthNum,
+      diploma_percentage: diplomaNum,
       github_url: github_url || null,
       linkedin_url: linkedin_url || null,
       portfolio_url: portfolio_url || null,
@@ -183,12 +245,15 @@ router.put('/profile', requireAuth, requireRole('STUDENT'), async (req: Request,
 
     // Upsert profile deriving student identity exclusively from authenticated req.user.id
     const updatedProfile = await upsertStudentProfile(userId, profileData);
+    const resumes = await getResumesByUserId(userId);
+    const profileCompletion = calculateProfileCompletion(updatedProfile, resumes.length > 0);
 
     return res.status(200).json({
       success: true,
       message: 'Student profile updated successfully.',
       data: {
         profile: updatedProfile,
+        profile_completion: profileCompletion,
       },
     });
   } catch (err: any) {
@@ -251,14 +316,12 @@ router.post('/resumes', requireAuth, requireRole('STUDENT'), (req: Request, res:
     }
 
     try {
-      // Generate safe random UUID filename for disk storage
       const storedFilename = `${uuidv4()}.pdf`;
       const fullFilePath = path.join(UPLOAD_DIR, storedFilename);
 
-      // Save file buffer to isolated upload storage directory
+      // Save file buffer to isolated upload storage directory outside web root
       fs.writeFileSync(fullFilePath, fileBuffer);
 
-      // Save resume record in database
       const resumeRecord = await createResumeRecord({
         userId: req.user!.id,
         originalFilename: originalName,
@@ -312,6 +375,86 @@ router.get('/resumes', requireAuth, requireRole('STUDENT'), async (req: Request,
 });
 
 /**
+ * PATCH /api/students/resumes/:id/primary
+ * Sets target resume as Primary resume for current authenticated student
+ */
+router.patch('/resumes/:id/primary', requireAuth, requireRole('STUDENT'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const resumeId = req.params.id;
+
+    const updated = await setPrimaryResume(resumeId, userId);
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Resume not found or access denied.' },
+      });
+    }
+
+    const resumes = await getResumesByUserId(userId);
+    return res.status(200).json({
+      success: true,
+      message: 'Primary resume set successfully.',
+      data: {
+        resumes: resumes.map(sanitizeResume),
+      },
+    });
+  } catch (err: any) {
+    console.error('Error setting primary resume:', err.message);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_SERVER_ERROR', message: 'Failed to set primary resume.' },
+    });
+  }
+});
+
+/**
+ * GET /api/students/resumes/:id
+ * Streams/Downloads PDF resume (Ownership verified) or returns metadata
+ */
+router.get('/resumes/:id', requireAuth, requireRole('STUDENT'), async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const resumeId = req.params.id;
+
+    const resume = await getResumeById(resumeId);
+    if (!resume || resume.user_id !== userId) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Resume not found or access denied.' },
+      });
+    }
+
+    // Check if client requested JSON metadata
+    if (req.headers.accept && req.headers.accept.includes('application/json') && req.query.metadata === 'true') {
+      return res.status(200).json({
+        success: true,
+        data: {
+          resume: sanitizeResume(resume),
+        },
+      });
+    }
+
+    if (!fs.existsSync(resume.file_path)) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'FILE_NOT_FOUND', message: 'Resume file missing on server storage.' },
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${resume.original_filename}"`);
+    return res.sendFile(resume.file_path);
+  } catch (err: any) {
+    console.error('Error serving resume:', err.message);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_SERVER_ERROR', message: 'Failed to serve resume.' },
+    });
+  }
+});
+
+/**
  * DELETE /api/students/resumes/:id
  * Deletes a resume record by ID (Verifies strict ownership)
  */
@@ -320,7 +463,6 @@ router.delete('/resumes/:id', requireAuth, requireRole('STUDENT'), async (req: R
     const userId = req.user!.id;
     const resumeId = req.params.id;
 
-    // Check ownership before deleting
     const existingResume = await getResumeById(resumeId);
     if (!existingResume || existingResume.user_id !== userId) {
       return res.status(404).json({
@@ -329,10 +471,8 @@ router.delete('/resumes/:id', requireAuth, requireRole('STUDENT'), async (req: R
       });
     }
 
-    // Delete database record
     const deleted = await deleteResumeRecord(resumeId, userId);
     if (deleted) {
-      // Remove physical file from disk if it exists
       if (fs.existsSync(existingResume.file_path)) {
         try {
           fs.unlinkSync(existingResume.file_path);
@@ -357,42 +497,6 @@ router.delete('/resumes/:id', requireAuth, requireRole('STUDENT'), async (req: R
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_SERVER_ERROR', message: 'Failed to delete resume.' },
-    });
-  }
-});
-
-/**
- * GET /api/students/resumes/:id/download
- * Downloads/Streams PDF resume (Strict ownership verification)
- */
-router.get('/resumes/:id/download', requireAuth, requireRole('STUDENT'), async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    const resumeId = req.params.id;
-
-    const resume = await getResumeById(resumeId);
-    if (!resume || resume.user_id !== userId) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'NOT_FOUND', message: 'Resume not found or access denied.' },
-      });
-    }
-
-    if (!fs.existsSync(resume.file_path)) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'FILE_NOT_FOUND', message: 'Resume file missing on server storage.' },
-      });
-    }
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${resume.original_filename}"`);
-    return res.sendFile(resume.file_path);
-  } catch (err: any) {
-    console.error('Error downloading resume:', err.message);
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_SERVER_ERROR', message: 'Failed to download resume.' },
     });
   }
 });

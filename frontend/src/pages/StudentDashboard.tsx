@@ -12,6 +12,10 @@ interface StudentProfile {
   cgpa: number;
   active_backlogs: number;
   skills: string[];
+  phone_number: string;
+  tenth_percentage: string;
+  twelfth_percentage: string;
+  diploma_percentage: string;
   github_url: string;
   linkedin_url: string;
   portfolio_url: string;
@@ -23,6 +27,7 @@ export const StudentDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [profileLoading, setProfileLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [completionScore, setCompletionScore] = useState<number>(0);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [formData, setFormData] = useState<StudentProfile>({
@@ -35,6 +40,10 @@ export const StudentDashboard: React.FC = () => {
     cgpa: 0.0,
     active_backlogs: 0,
     skills: [],
+    phone_number: '',
+    tenth_percentage: '',
+    twelfth_percentage: '',
+    diploma_percentage: '',
     github_url: '',
     linkedin_url: '',
     portfolio_url: '',
@@ -48,22 +57,29 @@ export const StudentDashboard: React.FC = () => {
         credentials: 'include',
       });
       const data = await res.json();
-      if (res.ok && data.success && data.data.profile) {
-        const p = data.data.profile;
-        setFormData({
-          first_name: p.first_name || '',
-          last_name: p.last_name || '',
-          roll_number: p.roll_number || '',
-          degree: p.degree || 'B.Tech',
-          branch: p.branch || 'Computer Science & Engineering',
-          graduation_year: p.graduation_year || new Date().getFullYear(),
-          cgpa: p.cgpa || 0.0,
-          active_backlogs: p.active_backlogs || 0,
-          skills: p.skills || [],
-          github_url: p.github_url || '',
-          linkedin_url: p.linkedin_url || '',
-          portfolio_url: p.portfolio_url || '',
-        });
+      if (res.ok && data.success) {
+        setCompletionScore(data.data.profile_completion || 0);
+        if (data.data.profile) {
+          const p = data.data.profile;
+          setFormData({
+            first_name: p.first_name || '',
+            last_name: p.last_name || '',
+            roll_number: p.roll_number || '',
+            degree: p.degree || 'B.Tech',
+            branch: p.branch || 'Computer Science & Engineering',
+            graduation_year: p.graduation_year || new Date().getFullYear(),
+            cgpa: p.cgpa !== null && p.cgpa !== undefined ? p.cgpa : 0.0,
+            active_backlogs: p.active_backlogs || 0,
+            skills: p.skills || [],
+            phone_number: p.phone_number || '',
+            tenth_percentage: p.tenth_percentage !== null && p.tenth_percentage !== undefined ? String(p.tenth_percentage) : '',
+            twelfth_percentage: p.twelfth_percentage !== null && p.twelfth_percentage !== undefined ? String(p.twelfth_percentage) : '',
+            diploma_percentage: p.diploma_percentage !== null && p.diploma_percentage !== undefined ? String(p.diploma_percentage) : '',
+            github_url: p.github_url || '',
+            linkedin_url: p.linkedin_url || '',
+            portfolio_url: p.portfolio_url || '',
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
@@ -129,6 +145,9 @@ export const StudentDashboard: React.FC = () => {
       const data = await res.json();
       if (res.ok && data.success) {
         setMessage({ type: 'success', text: 'Student profile saved successfully!' });
+        if (data.data.profile_completion !== undefined) {
+          setCompletionScore(data.data.profile_completion);
+        }
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to save profile.' });
       }
@@ -144,13 +163,41 @@ export const StudentDashboard: React.FC = () => {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div className="badge status-online">Student Profile & Academic Details</div>
+            <div className="badge status-online">Student Placement Profile</div>
             <h2>Student Profile Portal</h2>
             <p className="subtitle">Account: <code>{user?.email}</code></p>
           </div>
           <button className="btn-refresh" onClick={logout} style={{ background: '#ef4444' }}>
             Sign Out
           </button>
+        </div>
+
+        {/* Profile Completion Score Banner */}
+        <div style={{
+          marginTop: '1.25rem',
+          padding: '1rem',
+          background: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid var(--border)',
+          borderRadius: '0.75rem',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+            <strong>Profile Completion Score:</strong>
+            <strong style={{ color: completionScore >= 80 ? '#34d399' : '#f59e0b' }}>{completionScore}%</strong>
+          </div>
+          <div style={{
+            width: '100%',
+            height: '8px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            borderRadius: '4px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${completionScore}%`,
+              height: '100%',
+              background: completionScore >= 80 ? '#10b981' : '#f59e0b',
+              transition: 'width 0.3s ease',
+            }}></div>
+          </div>
         </div>
 
         {message && (
@@ -190,16 +237,29 @@ export const StudentDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="form-group">
-              <label>Roll Number / Student ID</label>
-              <input
-                type="text"
-                name="roll_number"
-                value={formData.roll_number}
-                onChange={handleChange}
-                placeholder="2026-CSE-001"
-                required
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>Roll Number / Student ID</label>
+                <input
+                  type="text"
+                  name="roll_number"
+                  value={formData.roll_number}
+                  onChange={handleChange}
+                  placeholder="2026-CSE-001"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Contact Phone Number</label>
+                <input
+                  type="tel"
+                  name="phone_number"
+                  value={formData.phone_number}
+                  onChange={handleChange}
+                  placeholder="+91 9876543210"
+                />
+              </div>
             </div>
 
             {/* Academic Details */}
@@ -266,6 +326,52 @@ export const StudentDashboard: React.FC = () => {
                   onChange={handleChange}
                   min="0"
                   required
+                />
+              </div>
+            </div>
+
+            {/* Placement Academic Percentages */}
+            <h4 style={{ marginTop: '1rem', color: 'var(--text-muted)' }}>Placement Academic Percentages</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>10th Percentage (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="tenth_percentage"
+                  value={formData.tenth_percentage}
+                  onChange={handleChange}
+                  placeholder="e.g. 92.50"
+                  min="0"
+                  max="100"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>12th Percentage (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="twelfth_percentage"
+                  value={formData.twelfth_percentage}
+                  onChange={handleChange}
+                  placeholder="e.g. 88.00"
+                  min="0"
+                  max="100"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Diploma Percentage (%) [Optional]</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="diploma_percentage"
+                  value={formData.diploma_percentage}
+                  onChange={handleChange}
+                  placeholder="e.g. 85.00"
+                  min="0"
+                  max="100"
                 />
               </div>
             </div>
@@ -370,7 +476,7 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       {/* Resume Management Section */}
-      <ResumeManager />
+      <ResumeManager onResumeChange={fetchProfile} />
     </div>
   );
 };

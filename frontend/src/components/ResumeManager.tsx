@@ -11,7 +11,7 @@ export interface Resume {
 
 const API_BASE = 'http://localhost:5000/api';
 
-export const ResumeManager: React.FC = () => {
+export const ResumeManager: React.FC<{ onResumeChange?: () => void }> = ({ onResumeChange }) => {
   const [resumes, setResumes] = useState<Resume[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [uploading, setUploading] = useState<boolean>(false);
@@ -79,10 +79,10 @@ export const ResumeManager: React.FC = () => {
       if (res.ok && data.success) {
         setMessage({ type: 'success', text: 'PDF resume uploaded successfully.' });
         setSelectedFile(null);
-        // Reset file input element
         const fileInput = document.getElementById('resume-file-input') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
         await fetchResumes();
+        if (onResumeChange) onResumeChange();
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to upload resume.' });
       }
@@ -90,6 +90,26 @@ export const ResumeManager: React.FC = () => {
       setMessage({ type: 'error', text: 'Network error uploading resume.' });
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleSetPrimary = async (resumeId: string) => {
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/students/resumes/${resumeId}/primary`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage({ type: 'success', text: 'Primary resume updated.' });
+        await fetchResumes();
+        if (onResumeChange) onResumeChange();
+      } else {
+        setMessage({ type: 'error', text: data.error?.message || 'Failed to update primary resume.' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: 'Network error setting primary resume.' });
     }
   };
 
@@ -106,6 +126,7 @@ export const ResumeManager: React.FC = () => {
       if (res.ok && data.success) {
         setMessage({ type: 'success', text: 'Resume deleted successfully.' });
         await fetchResumes();
+        if (onResumeChange) onResumeChange();
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to delete resume.' });
       }
@@ -121,9 +142,9 @@ export const ResumeManager: React.FC = () => {
   };
 
   return (
-    <div className="section-card">
+    <div className="section-card" style={{ marginTop: '1.5rem' }}>
       <h3>📄 PDF Resume Management</h3>
-      <p className="subtitle">Upload and manage your official placement resume (PDF format, max 5MB)</p>
+      <p className="subtitle">Upload and manage your official placement resumes (PDF format, max 5MB)</p>
 
       {message && (
         <div className={`alert alert-${message.type === 'success' ? 'success' : 'error'}`}>
@@ -151,29 +172,49 @@ export const ResumeManager: React.FC = () => {
       ) : (
         <div className="resume-list">
           {resumes.map((r) => (
-            <div key={r.id} className="resume-item" style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '0.85rem 1rem',
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid var(--border)',
-              borderRadius: '0.6rem',
-              marginBottom: '0.75rem',
-            }}>
+            <div
+              key={r.id}
+              className="resume-item"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '0.85rem 1rem',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: r.is_primary ? '1px solid #3b82f6' : '1px solid var(--border)',
+                borderRadius: '0.6rem',
+                marginBottom: '0.75rem',
+              }}
+            >
               <div>
-                <strong>{r.original_filename}</strong> {r.is_primary && <span className="badge">Primary</span>}
+                <strong>{r.original_filename}</strong>{' '}
+                {r.is_primary ? (
+                  <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}>
+                    Primary ✅
+                  </span>
+                ) : null}
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   Size: {formatFileSize(r.file_size)} • Uploaded: {new Date(r.uploaded_at).toLocaleDateString()}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {!r.is_primary && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPrimary(r.id)}
+                    className="btn-secondary"
+                    style={{ fontSize: '0.8rem' }}
+                  >
+                    Set as Primary
+                  </button>
+                )}
                 <a
-                  href={`${API_BASE}/students/resumes/${r.id}/download`}
+                  href={`${API_BASE}/students/resumes/${r.id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-secondary"
-                  style={{ textDecoration: 'none', display: 'inline-block' }}
+                  style={{ textDecoration: 'none', display: 'inline-block', fontSize: '0.8rem' }}
                 >
                   View PDF
                 </a>
@@ -186,8 +227,9 @@ export const ResumeManager: React.FC = () => {
                     color: '#fff',
                     border: 'none',
                     borderRadius: '0.5rem',
-                    padding: '0.5rem 0.85rem',
+                    padding: '0.4rem 0.75rem',
                     cursor: 'pointer',
+                    fontSize: '0.8rem',
                   }}
                 >
                   Delete
