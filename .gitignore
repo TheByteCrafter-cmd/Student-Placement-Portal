@@ -20,6 +20,10 @@ backend/dist/
 .env.test.local
 .env.production.local
 
+# File Upload Storage
+uploads/
+backend/uploads/
+
 # Testing and Coverage
 /coverage
 /.nyc_output

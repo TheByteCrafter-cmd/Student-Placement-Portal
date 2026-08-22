@@ -5,9 +5,12 @@ import cookieParser from 'cookie-parser';
 import { config } from './config/env';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
+import studentRoutes from './routes/student.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { testDatabaseConnection } from './config/db';
 import { initUserTable } from './models/user.model';
+import { initStudentTable } from './models/student.model';
+import { initResumeTable } from './models/resume.model';
 import { seedAdminUser } from './db/seedAdmin';
 
 const app = express();
@@ -27,6 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/students', studentRoutes);
 
 // Protected Demo Verification Routes mounted under /api/admin & /api/student
 app.use('/api', authRoutes);
@@ -35,14 +39,12 @@ app.use('/api', authRoutes);
 app.get('/', (req, res) => {
   res.json({
     message: 'Student Placement Portal Backend API Service',
-    phase: 'Phase 2 - Authentication & Role-Based Access Control',
+    phase: 'Phase 3 - Student Profile & Resume Management',
     endpoints: {
       health: '/api/health',
-      register: '/api/auth/register',
-      login: '/api/auth/login',
-      me: '/api/auth/me',
-      adminTest: '/api/admin/test',
-      studentTest: '/api/student/test',
+      auth: '/api/auth',
+      studentProfile: '/api/students/profile',
+      studentResumes: '/api/students/resumes',
     },
   });
 });
@@ -70,8 +72,10 @@ const server = app.listen(config.port, async () => {
   console.log(`🏥 Health Check: http://localhost:${config.port}/api/health`);
   console.log(`====================================================`);
 
-  // Initialize DB Schema & Admin Seed
+  // Initialize DB Schemas & Admin Seed
   await initUserTable();
+  await initStudentTable();
+  await initResumeTable();
   await seedAdminUser();
 
   const dbHealth = await testDatabaseConnection();
