@@ -7,6 +7,7 @@ import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import studentRoutes from './routes/student.routes';
 import adminRoutes from './routes/admin.routes';
+import jobRoutes from './routes/job.routes';
 import { errorHandler } from './middleware/errorHandler';
 import { testDatabaseConnection } from './config/db';
 import { initUserTable } from './models/user.model';
@@ -36,20 +37,19 @@ app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/jobs', jobRoutes);
 
 // Root Fallback Route
 app.get('/', (req, res) => {
   res.json({
     message: 'Student Placement Portal Backend API Service',
-    phase: 'Phase 4 - Admin Control Center & Moderation',
+    phase: 'Phase 5 - Job Database, Approved Job Feed & Student Job Foundation',
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
       studentProfile: '/api/students/profile',
+      studentJobs: '/api/jobs',
       adminDashboard: '/api/admin/dashboard',
-      adminStudents: '/api/admin/students',
-      adminJobsPending: '/api/admin/jobs/pending',
-      adminAuditLogs: '/api/admin/audit-logs',
     },
   });
 });

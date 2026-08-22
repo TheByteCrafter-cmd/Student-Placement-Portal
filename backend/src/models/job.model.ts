@@ -39,6 +39,8 @@ export interface JobRecord {
   updated_at: Date;
 }
 
+export type PublicSafeJob = Omit<JobRecord, 'verified_by' | 'rejection_reason'>;
+
 const inMemoryJobs: Map<string, JobRecord> = new Map();
 
 /**
@@ -89,10 +91,12 @@ export async function initJobTable(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_jobs_verification ON jobs(verification_status);
     CREATE INDEX IF NOT EXISTS idx_jobs_lifecycle ON jobs(lifecycle_status);
+    CREATE INDEX IF NOT EXISTS idx_jobs_publication ON jobs(publication_status);
     CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_name);
     CREATE INDEX IF NOT EXISTS idx_jobs_location ON jobs(location);
     CREATE INDEX IF NOT EXISTS idx_jobs_source ON jobs(source_name);
     CREATE INDEX IF NOT EXISTS idx_jobs_discovered ON jobs(discovered_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_jobs_posted ON jobs(posted_at DESC);
   `;
 
   try {
@@ -123,9 +127,9 @@ function getInitialJobs(): Omit<JobRecord, 'id' | 'created_at' | 'updated_at'>[]
       branch_eligibility: ['Computer Science', 'Information Technology', 'Electronics'],
       cgpa_requirement: 7.5,
       backlog_requirement: 0,
-      verification_status: 'PENDING_REVIEW',
+      verification_status: 'APPROVED',
       lifecycle_status: 'ACTIVE',
-      publication_status: 'HIDDEN',
+      publication_status: 'PUBLISHED',
       source_name: 'Tech Openings API Connector',
       source_type: 'API',
       source_url: 'https://api.techcareers.example.com/v1/jobs/EXT-JOB-2026-001',
@@ -134,7 +138,7 @@ function getInitialJobs(): Omit<JobRecord, 'id' | 'created_at' | 'updated_at'>[]
       closing_at: new Date(now.getTime() + 14 * 24 * 3600 * 1000),
       discovered_at: now,
       verified_by: null,
-      verified_at: null,
+      verified_at: now,
       rejection_reason: null,
     },
     {
@@ -246,7 +250,165 @@ async function seedDefaultPostgresJobs() {
 }
 
 /**
- * Queries jobs with filters and pagination
+ * PUBLIC / STUDENT JOB FEED QUERY
+ * STRICT RULE: Returns ONLY APPROVED, PUBLISHED, and ACTIVE jobs.
+ * PENDING_REVIEW, REJECTED, HIDDEN, and EXPIRED jobs are NEVER returned.
+ */
+export async function getPublicJobs(options: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  company?: string;
+  location?: string;
+  workMode?: string;
+  employmentType?: string;
+  branch?: string;
+  sort?: 'latest' | 'oldest' | 'company';
+}): Promise<{ jobs: PublicSafeJob[]; total: number }> {
+  const page = Math.max(1, options.page || 1);
+  const limit = Math.min(100, Math.max(1, options.limit || 20));
+  const offset = (page - 1) * limit;
+  const sort = options.sort || 'latest';
+
+  const dbHealth = await testDatabaseConnection();
+
+  if (dbHealth.connected) {
+    try {
+      // Hardcoded server-side safety condition
+      const conditions: string[] = [
+        "verification_status = 'APPROVED'",
+        "publication_status = 'PUBLISHED'",
+        "lifecycle_status = 'ACTIVE'",
+      ];
+      const values: any[] = [];
+      let paramIdx = 1;
+
+      if (options.company) {
+        conditions.push(`company_name ILIKE $${paramIdx++}`);
+        values.push(`%${options.company.trim()}%`);
+      }
+      if (options.location) {
+        conditions.push(`location ILIKE $${paramIdx++}`);
+        values.push(`%${options.location.trim()}%`);
+      }
+      if (options.workMode) {
+        conditions.push(`work_mode = $${paramIdx++}`);
+        values.push(options.workMode.trim());
+      }
+      if (options.employmentType) {
+        conditions.push(`employment_type = $${paramIdx++}`);
+        values.push(options.employmentType.trim());
+      }
+      if (options.branch) {
+        conditions.push(`$${paramIdx++} = ANY(branch_eligibility)`);
+        values.push(options.branch.trim());
+      }
+      if (options.search) {
+        conditions.push(`(title ILIKE $${paramIdx} OR company_name ILIKE $${paramIdx} OR description ILIKE $${paramIdx} OR location ILIKE $${paramIdx})`);
+        values.push(`%${options.search.trim()}%`);
+        paramIdx++;
+      }
+
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
+      const countRes = await pool.query(`SELECT COUNT(*) FROM jobs ${whereClause}`, values);
+      const total = parseInt(countRes.rows[0].count, 10);
+
+      // Safe ORDER BY mapping (allow-listed)
+      let orderBy = 'COALESCE(posted_at, discovered_at) DESC';
+      if (sort === 'oldest') orderBy = 'COALESCE(posted_at, discovered_at) ASC';
+      if (sort === 'company') orderBy = 'company_name ASC, title ASC';
+
+      values.push(limit, offset);
+      const res = await pool.query(
+        `SELECT id, external_job_id, company_name, title, description, location, work_mode, employment_type,
+                salary_package, experience_requirement, qualification_requirement, required_skills, preferred_skills,
+                branch_eligibility, cgpa_requirement::float, backlog_requirement, verification_status, lifecycle_status,
+                publication_status, source_name, source_type, source_url, apply_url, posted_at, closing_at, discovered_at,
+                created_at, updated_at
+         FROM jobs ${whereClause}
+         ORDER BY ${orderBy}
+         LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+        values
+      );
+
+      return { jobs: res.rows, total };
+    } catch (err: any) {
+      console.error('Error fetching public jobs from DB:', err.message);
+    }
+  }
+
+  // Fallback in-memory query
+  let filtered = Array.from(inMemoryJobs.values()).filter(
+    (j) => j.verification_status === 'APPROVED' && j.publication_status === 'PUBLISHED' && j.lifecycle_status === 'ACTIVE'
+  );
+
+  if (options.company) {
+    filtered = filtered.filter((j) => j.company_name.toLowerCase().includes(options.company!.toLowerCase()));
+  }
+  if (options.location) {
+    filtered = filtered.filter((j) => j.location.toLowerCase().includes(options.location!.toLowerCase()));
+  }
+  if (options.workMode) {
+    filtered = filtered.filter((j) => j.work_mode === options.workMode);
+  }
+  if (options.employmentType) {
+    filtered = filtered.filter((j) => j.employment_type === options.employmentType);
+  }
+  if (options.search) {
+    const q = options.search.toLowerCase();
+    filtered = filtered.filter(
+      (j) => j.title.toLowerCase().includes(q) || j.company_name.toLowerCase().includes(q) || j.description.toLowerCase().includes(q) || j.location.toLowerCase().includes(q)
+    );
+  }
+
+  // Sorting
+  if (sort === 'oldest') {
+    filtered.sort((a, b) => (a.posted_at || a.discovered_at).getTime() - (b.posted_at || b.discovered_at).getTime());
+  } else if (sort === 'company') {
+    filtered.sort((a, b) => a.company_name.localeCompare(b.company_name));
+  } else {
+    filtered.sort((a, b) => (b.posted_at || b.discovered_at).getTime() - (a.posted_at || a.discovered_at).getTime());
+  }
+
+  const total = filtered.length;
+  const jobs = filtered.slice(offset, offset + limit).map(sanitizePublicJob);
+  return { jobs, total };
+}
+
+/**
+ * PUBLIC / STUDENT SINGLE JOB QUERY BY ID
+ * STRICT RULE: Returns job ONLY if APPROVED and PUBLISHED.
+ */
+export async function getPublicJobById(jobId: string): Promise<PublicSafeJob | null> {
+  const dbHealth = await testDatabaseConnection();
+
+  if (dbHealth.connected) {
+    try {
+      const res = await pool.query(
+        `SELECT id, external_job_id, company_name, title, description, location, work_mode, employment_type,
+                salary_package, experience_requirement, qualification_requirement, required_skills, preferred_skills,
+                branch_eligibility, cgpa_requirement::float, backlog_requirement, verification_status, lifecycle_status,
+                publication_status, source_name, source_type, source_url, apply_url, posted_at, closing_at, discovered_at,
+                created_at, updated_at
+         FROM jobs
+         WHERE id = $1 AND verification_status = 'APPROVED' AND publication_status = 'PUBLISHED' AND lifecycle_status = 'ACTIVE'`,
+        [jobId]
+      );
+      if (res.rows.length > 0) return res.rows[0];
+    } catch (err: any) {
+      console.error('Error querying public job by ID from DB:', err.message);
+    }
+  }
+
+  const j = inMemoryJobs.get(jobId);
+  if (j && j.verification_status === 'APPROVED' && j.publication_status === 'PUBLISHED' && j.lifecycle_status === 'ACTIVE') {
+    return sanitizePublicJob(j);
+  }
+  return null;
+}
+
+/**
+ * ADMIN QUERY FOR ALL JOBS
  */
 export async function getJobs(options: {
   page?: number;
@@ -348,7 +510,7 @@ export async function getJobs(options: {
 }
 
 /**
- * Gets job by ID
+ * Gets job by ID (Admin inspect)
  */
 export async function getJobById(jobId: string): Promise<JobRecord | null> {
   const dbHealth = await testDatabaseConnection();
@@ -511,4 +673,12 @@ export async function updateNormalizedJob(
 
   inMemoryJobs.set(jobId, updated);
   return updated;
+}
+
+/**
+ * Strips internal admin moderation fields (verified_by, rejection_reason) for public student output
+ */
+export function sanitizePublicJob(job: JobRecord): PublicSafeJob {
+  const { verified_by, rejection_reason, ...safeJob } = job;
+  return safeJob;
 }

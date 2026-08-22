@@ -4,7 +4,7 @@ A real-time / near-real-time student placement intelligence platform that discov
 
 ---
 
-## 🚀 Phase 4 — Admin Control Center & Moderation
+## 🚀 Phase 5 — Job Database, Approved Job Feed & Student Job Foundation
 
 ### 1. Environment & Setup
 1. Copy `.env.example` to `.env`:
@@ -33,6 +33,7 @@ npm run dev
 ```
 The backend API server starts at `http://localhost:5000`.
 - Health Check Endpoint: `http://localhost:5000/api/health`
+- Student Job Feed API: `http://localhost:5000/api/jobs`
 - Admin Dashboard API: `http://localhost:5000/api/admin/dashboard`
 
 ### 2. Frontend Client Setup
@@ -42,6 +43,7 @@ npm install
 npm run dev
 ```
 The frontend SPA starts at `http://localhost:5173`.
+- Student Job Feed: `http://localhost:5173/student` (Jobs Tab)
 - Admin Control Center: `http://localhost:5173/admin`
 
 ---
@@ -60,8 +62,8 @@ The frontend SPA starts at `http://localhost:5173`.
 - [x] **Phase 1 — Project Setup & Foundation**
 - [x] **Phase 2 — Authentication & Role-Based Access Control (RBAC)**
 - [x] **Phase 3 — Student Profile & Resume Management**
-- [x] **Phase 4 — Admin Control Center & Moderation** *(Completed)*
-- [ ] **Phase 5 — Job Database**
+- [x] **Phase 4 — Admin Control Center & Moderation**
+- [x] **Phase 5 — Job Database & Student Job Portal** *(Completed)*
 - [ ] **Phase 6 — Real-Time Job Aggregation**
 - [ ] **Phase 7 — Extraction & Normalization**
 - [ ] **Phase 8 — Duplicate Detection**
